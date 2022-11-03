@@ -1,0 +1,76 @@
+﻿ect * from dd_paytrack;
+
+IDTRACK    PTUSER        PTDATE       PTACTION       PTPAYID                
+4          AAX5367E220   10-DEC-12     INSERT        1470                   
+5          AAX5367E220   10-DEC-12     UPDATE            1470                   
+6          AAX5367E220   10-DEC-12     DELETE        1470                   
+Here is what I've done so far, even after adding these Insert, Update, and Delete statements, it's still returning an Empty table, but because of the answer below I have fixed what was suggested.
+
+*I fixed it, I had to add my own Update, Insert, and Delete statements after compiling the Trigger. Works great now. Thanks Noel!!!*
+
+    DROP TABLE dd_paytrack;
+    DROP SEQUENCE idtrack_seq;
+
+    CREATE TABLE dd_paytrack(
+    idtrack         NUMBER,
+    pt_user         VARCHAR2(30),
+    pt_date         DATE,
+    pt_action       VARCHAR2(30),
+    pt_payid        NUMBER(6,0),
+    CONSTRAINT pk_dd_paytrack PRIMARY KEY (idtrack)
+    );
+
+    CREATE SEQUENCE idtrack_seq;
+
+    CREATE OR REPLACE TRIGGER pledge_pay_trigger
+      AFTER 
+        INSERT OR 
+        UPDATE OR 
+        DELETE 
+      ON dd_payment
+      FOR EACH ROW  
+    DECLARE
+      log_action  dd_paytrack.pt_action%TYPE; 
+      id_pay      dd_paytrack.pt_payid%TYPE;    
+    BEGIN
+    id_pay := :NEW.idpay;
+    IF INSERTING THEN
+    log_action := 'Insert';
+    ELSIF UPDATING THEN
+    log_action := 'Update';
+    ELSIF DELETING THEN
+    id_pay := :OLD.idpay;
+    log_action := 'Delete';
+    ELSE
+    DBMS_OUTPUT.PUT_LINE('This code is not reachable.');
+    END IF;
+
+    INSERT INTO dd_paytrack (idtrack, pt_user, pt_date, pt_action, pt_payid)
+      VALUES(idtrack_seq.NEXTVAL, USER, TO_CHAR(SYSDATE, 'DD-MON-YY'), log_action,      
+    id_pay);
+
+    END pledge_pay_trigger;
+    /
+
+   INSERT INTO dd_payment(idpay, idpledge, payamt, paydate, paymethod)
+    VALUES (1470, 105, 250, SYSDATE, 'CC');
+    commit;  
+
+    UPDATE dd_payment
+    SET payamt = 25
+    WHERE idpay = 1470;
+    commit;
+
+    UPDATE dd_payment 
+    SET payamt = 2000
+    WHERE idpay = 1470;
+    COMMIT;
+
+    DELETE 
+    FROM dd_payment
+    WHERE idpay = 1470;
+    COMMIT;
+
+
+    SET serveroutput ON
+    select * from dd_paytrack; 

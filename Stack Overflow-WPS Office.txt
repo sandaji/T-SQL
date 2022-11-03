@@ -1,0 +1,579 @@
+﻿
+Stack Overflow
+Products
+PL/SQL trigger for after insert, update, delete that enters Data into Log Table with a Sequence
+Asked 9 years, 6 months ago
+Modified 7 years, 4 months ago
+Viewed 58k times
+
+3
+
+
+I am working on a homework problem. I am running into compilation issues with my trigger and am having trouble understanding how to create a trigger that references a sequence and another table, and insert those values into a log table that I've created. I have read that using SERIAL not null on the Table column entry may eliminates the need for a sequence and referencing table, but I need that for my homework to work.
+
+I need some help figuring out how to get my trigger to compile. It is having problems with my Bind Variables :NEW from the sequence, and also the idpay value inserted from another Table. I'm not sure if my declarations are correct and the first two statements after the BEGIN statement are correct as that 1st line was flagged as a compilation error. I think something is going on with this example and my lack of the NULL value entry there in the IF statement, but unsure where to put that part in my coding.
+
+And of course the Oracle 11g Reference Doc for Triggers, I've gone over it but you can check it out yourself too.
+
+Here is the setup question: 1. Use the Donations database. The organization wants to track all pledge payment activity. Each time a pledge payment is added, changed, or removed, the following information should be captured in a separate table: username, current date, action taken (INSERT, UPDATE, or DELETE), and the idpay value for the payment record.
+
+Create a table named DD_PAYTRACK to hold this information. Include a primary key column to be populated by a sequence, and create new sequence named DD_PTRACK_SEQ for the primary key column.
+
+Create a single trigger for recording the requested information to track pledge payment activity, and test the trigger for all action types for idpay=1470. Display the records from the DD_PAYTRACK table by using SELECT statement.
+
+select * from dd_paytrack;
+
+IDTRACK    PTUSER        PTDATE       PTACTION       PTPAYID                
+4          AAX5367E220   10-DEC-12     INSERT        1470                   
+5          AAX5367E220   10-DEC-12     UPDATE            1470                   
+6          AAX5367E220   10-DEC-12     DELETE        1470                   
+Here is what I've done so far, even after adding these Insert, Update, and Delete statements, it's still returning an Empty table, but because of the answer below I have fixed what was suggested.
+
+*I fixed it, I had to add my own Update, Insert, and Delete statements after compiling the Trigger. Works great now. Thanks Noel!!!*
+
+    DROP TABLE dd_paytrack;
+    DROP SEQUENCE idtrack_seq;
+
+    CREATE TABLE dd_paytrack(
+    idtrack         NUMBER,
+    pt_user         VARCHAR2(30),
+    pt_date         DATE,
+    pt_action       VARCHAR2(30),
+    pt_payid        NUMBER(6,0),
+    CONSTRAINT pk_dd_paytrack PRIMARY KEY (idtrack)
+    );
+
+    CREATE SEQUENCE idtrack_seq;
+
+    CREATE OR REPLACE TRIGGER pledge_pay_trigger
+      AFTER 
+        INSERT OR 
+        UPDATE OR 
+        DELETE 
+      ON dd_payment
+      FOR EACH ROW  
+    DECLARE
+      log_action  dd_paytrack.pt_action%TYPE; 
+      id_pay      dd_paytrack.pt_payid%TYPE;    
+    BEGIN
+    id_pay := :NEW.idpay;
+    IF INSERTING THEN
+    log_action := 'Insert';
+    ELSIF UPDATING THEN
+    log_action := 'Update';
+    ELSIF DELETING THEN
+    id_pay := :OLD.idpay;
+    log_action := 'Delete';
+    ELSE
+    DBMS_OUTPUT.PUT_LINE('This code is not reachable.');
+    END IF;
+
+    INSERT INTO dd_paytrack (idtrack, pt_user, pt_date, pt_action, pt_payid)
+      VALUES(idtrack_seq.NEXTVAL, USER, TO_CHAR(SYSDATE, 'DD-MON-YY'), log_action,      
+    id_pay);
+
+    END pledge_pay_trigger;
+    /
+
+   INSERT INTO dd_payment(idpay, idpledge, payamt, paydate, paymethod)
+    VALUES (1470, 105, 250, SYSDATE, 'CC');
+    commit;  
+
+    UPDATE dd_payment
+    SET payamt = 25
+    WHERE idpay = 1470;
+    commit;
+
+    UPDATE dd_payment 
+    SET payamt = 2000
+    WHERE idpay = 1470;
+    COMMIT;
+
+    DELETE 
+    FROM dd_payment
+    WHERE idpay = 1470;
+    COMMIT;
+
+
+    SET serveroutput ON
+    select * from dd_paytrack; 
+Here is the Donation Table Scheme which it references the dd_paytrack Table for my Homework problem. I tested it and this schema seems to work okay after cutting and pasting it.
+
+-- The DoGood Donor Database 
+-- A donor, who represents a person or company that has committed to make a donation to             
+the DoGood organzation. 
+
+DROP TABLE dd_donor CASCADE CONSTRAINTS;
+DROP TABLE dd_project CASCADE CONSTRAINTS;
+DROP TABLE dd_status CASCADE CONSTRAINTS;
+DROP TABLE dd_pledge CASCADE CONSTRAINTS;
+DROP TABLE dd_payment CASCADE CONSTRAINTS;
+CREATE TABLE DD_Donor (
+    idDonor number(4),
+    Firstname varchar2(15),
+    Lastname varchar2(30),
+                  Typecode CHAR(1),
+    Street varchar2(40),
+    City varchar2(20),
+    State char(2),
+    Zip varchar2(9),
+    Phone varchar2(10),
+    Fax varchar2(10),
+    Email varchar2(25),
+                  News char(1),
+    dtentered date DEFAULT SYSDATE,
+    CONSTRAINT donor_id_pk PRIMARY KEY(idDonor) );
+CREATE TABLE DD_Project (
+                   idProj number(6),
+                   Projname varchar2(60),
+                   Projstartdate DATE,
+                   Projenddate DATE,
+                   Projfundgoal number(12,2),
+                   ProjCoord varchar2(20),
+                   CONSTRAINT project_id_pk PRIMARY KEY(idProj),
+                   CONSTRAINT project_name_uk  UNIQUE (Projname)  );      
+CREATE TABLE DD_Status (
+                   idStatus number(2),
+                   Statusdesc varchar2(15),
+                   CONSTRAINT status_id_pk PRIMARY KEY(idStatus) );     
+CREATE TABLE DD_Pledge (
+                   idPledge number(5),
+                   idDonor number(4),
+                   Pledgedate DATE,
+                   Pledgeamt number(8,2),
+                   idProj number(5),
+                   idStatus number(2),
+                   Writeoff number(8,2),
+                   paymonths number(3),
+                   Campaign number(4),
+                   Firstpledge char(1),
+                   CONSTRAINT pledge_id_pk PRIMARY KEY(idPledge),
+                   CONSTRAINT pledge_idDonor_fk FOREIGN KEY (idDonor)
+                           REFERENCES dd_donor (idDonor), 
+                   CONSTRAINT pledge_idProj_fk FOREIGN KEY (idProj)
+                           REFERENCES dd_project (idProj),
+                   CONSTRAINT pledge_idStatus_fk FOREIGN KEY (idStatus)
+                           REFERENCES dd_status (idStatus));                   
+CREATE TABLE DD_Payment (
+                   idPay number(6),
+                   idPledge number(5),
+                   Payamt number(8,2),
+                   Paydate DATE,
+                   Paymethod char(2),
+                   CONSTRAINT payment_id_pk PRIMARY KEY(idPay),
+                   CONSTRAINT pay_idpledge_fk FOREIGN KEY (idPledge)
+                           REFERENCES dd_pledge (idPledge) );                   
+INSERT INTO dd_donor  
+  VALUES (301, 'Mary', 'Treanor', 'I','243 main St.', 'Norfolk',     
+'VA','23510',NULL,NULL,'mtrea492@mdv.com','Y','01-SEP-2012');
+INSERT INTO dd_donor  
+  VALUES (302, 'Patrick', 'Lee', 'I','11 Hooper St.', 'Norfolk',     
+'VA','23510','7572115445',NULL,'pleeNorf@gmail.com','N','09-SEP-2012');
+INSERT INTO dd_donor  
+  VALUES (303, 'Terry', 'Venor', 'I','556 Loop Lane.', 'Chesapeake', 
+'VA','23320',NULL,NULL,'tervenr@drw.edu','Y','18-SEP-2012');
+INSERT INTO dd_donor  
+  VALUES (304, 'Sherry', 'Pane', 'I','Center Blvd.', 'Virginia Beach', 
+'VA','23455',NULL,NULL,'toppane@yahoo.com','Y','21-SEP-2012');
+INSERT INTO dd_donor  
+  VALUES (305, 'Thomas', 'Sheer', 'I','66 Train St.', 'Chesapeake', 
+'VA','23322','7579390022',NULL,'tls3488@sheer.com','Y','01-MAR-2013');
+INSERT INTO dd_donor  
+  VALUES (306, NULL, 'Coastal Developers', 'B','3667 Shore Dr.', 'Virginia Beach', 
+'VA','23450','8889220004',NULL,'coastVA@cdev.com','Y','30-SEP-2012');
+INSERT INTO dd_donor  
+  VALUES (307, NULL, 'VA Community Org', 'G','689 Bush Dr.', 'Norfolk', 
+'VA','23513','7578337467','7578337468','vacmorg@biz.com','Y','03-OCT-2012');
+INSERT INTO dd_donor  
+  VALUES (308, 'Betty', 'Konklin', 'I','11 Shark Ln.', 'Virginia Beach', 
+'VA','23455','7574550087',NULL,'shark11@cox.net','N','04-OCT-2012');
+INSERT INTO dd_donor  
+  VALUES (309, 'Jim', 'Tapp', 'I','200 Pine Tree Blvd.', 'Chesapeake', 
+'VA','23320','',NULL,'','N','08-OCT-2012');
+INSERT INTO dd_donor  
+  VALUES (310, NULL, 'Unique Dezigns', 'B','Connect Circle Unit 12', 'Chesapeake', 
+'VA','23320','7574442121',NULL,'UDezigns@cox.net','Y','11-SEP-2012');
+INSERT INTO dd_project
+  VALUES (500,'Elders Assistance League', '01-SEP-2012','31-OCT-2012',15000,'Shawn 
+Hasee');
+INSERT INTO dd_project
+  VALUES (501,'Community food pantry #21 freezer equipment', '01-OCT-2012','31-DEC-
+2012',65000,'Shawn Hasee');
+INSERT INTO dd_project
+  VALUES (502,'Lang Scholarship Fund', '01-JAN-2013','01-NOV-2013',100000,'Traci 
+Brown');
+INSERT INTO dd_project
+  VALUES (503,'Animal shelter Vet Connect Program', '01-DEC-2012','30-MAR-
+2013',25000,'Traci Brown');
+INSERT INTO dd_project
+  VALUES (504,'Shelter Share Project 2013', '01-FEB-2013','31-JUL-2013',35000,'Traci 
+Brown');
+INSERT INTO dd_status
+  VALUES (10,'Open');
+INSERT INTO dd_status
+  VALUES (20,'Complete');
+INSERT INTO dd_status
+  VALUES (30,'Overdue');
+INSERT INTO dd_status
+  VALUES (40,'Closed');
+INSERT INTO dd_status
+  VALUES (50,'Hold');
+INSERT INTO dd_pledge
+   VALUES (100,303,'18-SEP-2012',80,500,20,NULL,0,738,'Y');
+INSERT INTO dd_pledge
+   VALUES (101,304,'21-SEP-2012',35,500,20,NULL,0,738,'Y');
+INSERT INTO dd_pledge
+   VALUES (102,310,'01-OCT-2012',500,501,20,NULL,0,749,'Y');
+INSERT INTO dd_pledge
+   VALUES (103,307,'03-OCT-2012',2000,501,20,NULL,0,749,'N');
+INSERT INTO dd_pledge
+   VALUES (104,308,'04-OCT-2012',240,501,10,NULL,12,749,'Y');
+INSERT INTO dd_pledge
+   VALUES (105,309,'08-OCT-2012',120,501,10,NULL,12,749,'Y');
+INSERT INTO dd_pledge
+   VALUES (106,301,'12-OCT-2012',75,500,20,NULL,0,738,'N');
+INSERT INTO dd_pledge
+   VALUES (107,302,'15-OCT-2012',1200,501,10,NULL,24,749,'Y');
+INSERT INTO dd_pledge
+   VALUES (108,308,'20-JAN-2013',480,503,10,NULL,24,790,'N');
+INSERT INTO dd_pledge
+   VALUES (109,301,'01-FEB-2013',360,503,10,NULL,12,790,'N');
+INSERT INTO dd_pledge
+   VALUES (110,303,'01-MAR-2013',300,504,10,NULL,12,756,'N');
+INSERT INTO dd_pledge
+   VALUES (111,306,'01-MAR-2013',1500,504,20,NULL,0,756,'Y');
+INSERT INTO dd_pledge
+   VALUES (112,309,'16-MAR-2013',240,504,10,NULL,12,756,'N');
+INSERT INTO dd_payment
+   VALUES (1425,100,80,'18-SEP-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1426,101,35,'21-SEP-2012','DC');
+INSERT INTO dd_payment
+   VALUES (1427,102,500,'01-OCT-2012','CH');
+INSERT INTO dd_payment
+   VALUES (1428,103,2000,'03-OCT-2012','CH');
+INSERT INTO dd_payment
+   VALUES (1429,106,75,'12-OCT-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1430,104,20,'01-NOV-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1431,105,10,'01-NOV-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1432,107,50,'01-NOV-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1433,104,20,'01-DEC-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1434,105,10,'01-DEC-2012','CC');
+INSERT INTO dd_payment
+  VALUES (1435,107,50,'01-DEC-2012','CC');
+INSERT INTO dd_payment
+   VALUES (1436,104,20,'01-JAN-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1437,105,10,'01-JAN-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1438,107,50,'01-JAN-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1439,104,20,'01-FEB-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1440,105,10,'01-FEB-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1441,107,50,'01-FEB-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1442,108,20,'01-FEB-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1443,109,30,'01-FEB-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1444,104,20,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1445,105,10,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1446,107,50,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1447,108,20,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1448,109,30,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1449,110,25,'01-MAR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1450,111,1500,'01-MAR-2013','CH');
+INSERT INTO dd_payment
+   VALUES (1451,104,20,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1452,105,10,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1453,107,50,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1454,108,20,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1455,109,30,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1456,110,25,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1457,112,20,'01-APR-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1458,104,20,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1459,105,10,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1460,107,50,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1461,108,20,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1462,109,30,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1463,110,25,'01-MAY-2013','CC');
+INSERT INTO dd_payment
+   VALUES (1464,112,20,'01-MAY-2013','CC');
+COMMIT;
+sqloracleplsqltriggers
+Share
+Improve this question
+Follow
+edited Dec 27, 2013 at 4:38
+Noel's user avatar
+Noel
+8,7732828 gold badges4444 silver badges6363 bronze badges
+asked Apr 25, 2013 at 11:57
+MeachamRob's user avatar
+MeachamRob
+36322 gold badges88 silver badges1919 bronze badges
+Add a comment
+2 Answers
+Sorted by:
+
+Highest score (default)
+
+2
+
+
+Since you are using the sequence value in the insert statement,
+
+   INSERT INTO dd_paytrack
+           (idtrack, pt_user, pt_date,
+            pt_action, pt_payid
+           )
+    VALUES (idtrack_seq.NEXTVAL, USER, TO_CHAR (SYSDATE, 'DD-MON-YY'),
+            log_action, id_pay
+           );
+there is no need to select it as below.
+
+SELECT idtrack_seq.NEXTVAL
+ INTO :NEW.idtrack
+ FROM DUAL;
+Also, you have missed a colon in this line,
+
+      id_pay := :OLD.idpay;
+EDIT: One more thing, there is no point in having DBMS_OUTPUT statement in the trigger. Since you wont see it, even if the execution reaches it.
+
+Share
+Improve this answer
+Follow
+edited Apr 25, 2013 at 12:31
+answered Apr 25, 2013 at 12:10
+Noel's user avatar
+Noel
+8,7732828 gold badges4444 silver badges6363 bronze badges
+I have fixed the errors, but my select query returns an Empty table now. I will edit my code above to reflect this change. Thank you for your help. Not sure why it's an empty table now with these edits. I included the Set Serveroutput ON – 
+MeachamRob
+ Apr 25, 2013 at 12:30 
+@meachamrob Are you sure you used the correct where clause? I dont see payment id 1470 in the insert statements. – 
+Noel
+ Apr 25, 2013 at 12:37
+You are correct, looking through the data shows no statements for 1470, I guess I have to create those insert, update, and delete statements myself. The Professor didn't explain that part too well – 
+MeachamRob
+ Apr 25, 2013 at 12:58
+Thanks It works now after adding those insert, delete, and update statements. I appreciate your quick response to my question and your time today. – 
+MeachamRob
+ Apr 25, 2013 at 14:25
+Add a comment
+
+2
+
+
+PL/SQL trigger for after insert, update, delete that enters Data into Log Table with a Sequence
+
+CREATE OR REPLACE TRIGGER pledge_pay_trigger2
+      AFTER 
+        INSERT OR 
+        UPDATE OR 
+        DELETE 
+      ON dd_payment
+      FOR EACH ROW  
+    DECLARE
+      log_action  dd_payment2.pt_action%TYPE; 
+      id_pay      dd_payment2.idpay%TYPE;    
+      id_Pledge   dd_payment2.idPledge%TYPE;    
+      Pay_amt     dd_payment2.Payamt%TYPE;    
+      Pay_date    dd_payment2.Paydate%TYPE;    
+      Pay_method  dd_payment2.Paymethod%TYPE;    
+
+BEGIN
+id_pay := :NEW.idpay;
+id_Pledge   := :NEW.IDPLEDGE;
+Pay_amt     := :NEW.PAYAMT;
+Pay_date    := :NEW.PAYDATE;
+Pay_method  := :NEW.PAYMETHOD;
+IF INSERTING THEN
+  log_action := 'Insert';
+   INSERT INTO dd_payment2(idpay, idpledge, payamt, paydate, paymethod,pt_action)
+    VALUES (id_pay, id_Pledge, Pay_amt, TO_CHAR(Pay_date, 'DD-MON-YY'), Pay_method,log_action);
+ELSIF UPDATING THEN
+  log_action := 'Update';
+  UPDATE DD_PAYMENT2 SET PAYAMT=Pay_amt,PAYDATE=TO_CHAR(Pay_date, 'DD-MON-YY'),pt_action='UPDATE' WHERE idpay=id_pay;
+ELSIF DELETING THEN
+id_pay := :OLD.idpay;
+log_action := 'Delete';
+UPDATE DD_PAYMENT2 SET pt_action='DELETE' WHERE idpay=id_pay;        
+ELSE
+DBMS_OUTPUT.PUT_LINE('This code is not reachable.');
+END IF;
+END pledge_pay_trigger2;
+/
+
+COMMIT;
+
+//    if log_action ='Insert' then
+       INSERT INTO dd_payment2(idpay, idpledge, payamt, paydate, paymethod,pt_action)
+        VALUES (id_pay, id_Pledge, Pay_amt, TO_CHAR(Pay_date, 'DD-MON-YY'), Pay_method,log_action);
+    else if log_action ='Update' then
+      UPDATE DD_PAYMENT2 SET PAYAMT=Pay_amt,PAYDATE=TO_CHAR(Pay_date, 'DD-MON-YY'),pt_action='UPDATE' WHERE idpay=id_pay;
+    else
+      UPDATE DD_PAYMENT2 SET pt_action='DELETE' WHERE idpay=id_pay;        
+    end if
+
+
+     ALTER TABLE DD_PAYMENT2 ADD pt_action VARCHAR2(30 BYTE);
+
+     COMMIT;
+
+
+        INSERT INTO dd_payment(idpay, idpledge, payamt, paydate, paymethod)
+    VALUES (1470, 105, 250, SYSDATE, 'CC');
+    commit;  
+
+
+
+         UPDATE dd_payment 
+    SET payamt = 2000
+    WHERE idpay = 1470;
+    COMMIT;
+
+        DELETE 
+    FROM dd_payment
+    WHERE idpay = 1470;
+    COMMIT;
+Share
+Improve this answer
+Follow
+edited Jun 20, 2015 at 13:08
+joe_young's user avatar
+joe_young
+4,04022 gold badges2525 silver badges3838 bronze badges
+answered Jun 20, 2015 at 11:59
+VISHAL KHALASI's user avatar
+VISHAL KHALASI
+2122 bronze badges
+Add a comment
+Your Answer
+Sign up or log in
+Post as a guest
+Name
+Email
+Required, but never shown
+
+By clicking “Post Your Answer”, you agree to our terms of service, privacy policy and cookie policy
+
+Not the answer you're looking for? Browse other questions tagged sqloracleplsqltriggers or ask your own question.
+The Overflow Blog
+Introducing the Ask Wizard: Your guide to crafting high-quality questions
+How to get more engineers entangled with quantum computing (Ep. 501)
+Featured on Meta
+The 2022 Community-a-thon has begun!
+Mobile app infrastructure being decommissioned
+The Ask Wizard (2022) has graduated
+Staging Ground Workflow: Canned Comments
+34 people chatting
+SQL
+1 hour ago - WhatsThePoint
+WhatsThePoint: 1 hour ago
+ARr0w: Oct 6 at 16:43
+Linked
+0
+PLS-00103: Encountered the symbol "INSERT" Need help finding cause of error pl/sql
+Related
+703
+Solutions for INSERT OR UPDATE on SQL Server
+0
+Removing all references from a tuple using Oracle/Access
+1084
+Insert into a MySQL table or update if exists
+1
+SQL - Pivot multiple columns without Aggregrates
+0
+SQL Table that calculates values from another SQL table
+0
+Calculate Maturity date in SQL Server 2008
+0
+getting monthly data for specific months based on SYSDATE
+0
+Oracle: Trigger to insert values into another Table with one additional auto increment primary key column
+Hot Network Questions
+Why is a register initialised through bitwise operations instead of a binary string?
+What's the point of this quote from Seneca (Stoicism)?
+Access current frame number during animation via Python API
+Philip Glass Etude 16 fingering
+What to do with discarded paragraphs?
+Higher Topos Theory- what's the moral?
+Is Douglas Station and Earth's Spacedock the same station?
+Is this laundering money?
+What is \fam command?
+Is Levin's Universal Search valid for the integer factorization problem while using the AKS test?
+A 90s show using handheld Internet
+Why do people use log(x+1) or log(y+1) as their independent/dependent variable?
+ATmega 2560 is getting hot controlling MOSFETs
+Why did Mayday Parker want to fight crime like her father did?
+Can someone explain why this position is judged to be so balanced, and why castling is wrong?
+Ignoring the first line of a csv file when sorting in Vim
+Is it a good idea to write a paper on new algorithms based on an existing algorithm?
+What are these wires coming out of my wall?
+Anxious about daily standup meetings
+Meaning of a buffer in electronics
+If you had an infinite amount of any element, which would be the best metal to make bullets?
+If I will show up, I'll let you know at the last minute. Correct?
+How do I convert a 14-30R to a 6-20R?
+3rd declension accusative plurals
+ Question feed
+
+STACK OVERFLOW
+Questions
+Help
+PRODUCTS
+Teams
+Advertising
+Collectives
+Talent
+COMPANY
+About
+Press
+Work Here
+Legal
+Privacy Policy
+Terms of Service
+Contact Us
+Cookie Settings
+Cookie Policy
+STACK EXCHANGE NETWORK
+Technology
+Culture & recreation
+Life & arts
+Science
+Professional
+Business
+API
+Data
+Blog
+Facebook
+Twitter
+LinkedIn
+Instagram
+Site design / logo © 2022 Stack Exchange Inc; user contributions licensed under CC BY-SA. rev 2022.10.31.43000
